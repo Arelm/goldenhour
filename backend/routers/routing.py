@@ -64,8 +64,7 @@ def codex_score_fn(triage):
               f"Specialist: {triage['specialist_needed']} | Requirements: {triage['key_requirements']}")
     resp = client.chat.completions.create(
         model="codex-mini-latest",
-        messages=[{"role":"system","content":CODEX_SYSTEM},{"role":"user","content":prompt}],
-        temperature=0.1
+        messages=[{"role":"system","content":CODEX_SYSTEM},{"role":"user","content":prompt}]
     )
     code = resp.choices[0].message.content.strip()
     if "```python" in code: code = code.split("```python")[1].split("```")[0].strip()
@@ -85,8 +84,7 @@ def explain(triage, top, alts):
               f"Alternatives: {alt_str}")
     resp = client.chat.completions.create(
         model="gpt-5.6",
-        messages=[{"role":"system","content":EXPLAIN_SYSTEM},{"role":"user","content":prompt}],
-        temperature=0.3, max_tokens=150
+        messages=[{"role":"system","content":EXPLAIN_SYSTEM},{"role":"user","content":prompt}], max_completion_tokens=150
     )
     return resp.choices[0].message.content.strip()
 

@@ -28,7 +28,6 @@ async def run_triage(symptoms, patient_age=None, additional_info=None):
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": f"{age}{extra}Emergency symptoms: {symptoms}"}
         ],
-        temperature=0.1,
         response_format={"type": "json_object"}
     )
     return json.loads(response.choices[0].message.content)
