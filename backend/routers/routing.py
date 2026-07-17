@@ -13,12 +13,21 @@ CODEX_SYSTEM = """You are Codex. Generate a Python function to score Lagos hospi
 Return ONLY a valid Python function named score_hospital.
 Signature: def score_hospital(hospital: dict, triage: dict, eta_minutes: int) -> float
 Score range: 0-100. Higher = better match.
+
+USE THESE EXACT DICT KEYS — do not invent aliases or alternative key names.
+hospital keys (ints, 1=yes/0=no unless noted): available_beds, icu_beds, available_icu,
+has_cardiologist, has_neurologist, has_trauma_surgeon, has_general_surgeon, has_pediatrician,
+generator_status, blood_bank, cath_lab, ct_scanner.
+triage keys: emergency_type (e.g. "TRAUMA", "CARDIAC_ARREST", "STROKE"), urgency_level
+(e.g. "CRITICAL"), specialist_needed (e.g. "trauma_surgeon" — map to the matching has_* key),
+key_requirements (list, e.g. ["icu","blood_bank","ct_scanner","generator"]).
+
 Weight based on emergency_type and urgency_level in triage.
-CRITICAL urgency: ICU + required specialist = 60%+ of score.
-Cardiac: prioritise cath_lab, cardiologist, available_icu.
-Stroke: prioritise ct_scanner, neurologist. Penalise ETA heavily — every 5min = -8pts.
-Trauma: prioritise trauma_surgeon, blood_bank.
-Always penalise generator_status=False for CRITICAL cases (-15pts)."""
+CRITICAL urgency: available_icu > 0 + required specialist present = 60%+ of score.
+Cardiac: prioritise cath_lab, has_cardiologist, available_icu.
+Stroke: prioritise ct_scanner, has_neurologist. Penalise ETA heavily — every 5min = -8pts.
+Trauma: prioritise has_trauma_surgeon, blood_bank.
+Always penalise generator_status=0 for CRITICAL cases (-15pts)."""
 
 EXPLAIN_SYSTEM = """You are a Lagos emergency dispatch AI.
 Explain in 2-3 plain sentences WHY this hospital was chosen.
@@ -84,7 +93,7 @@ def explain(triage, top, alts):
               f"Alternatives: {alt_str}")
     resp = client.chat.completions.create(
         model="gpt-5.6",
-        messages=[{"role":"system","content":EXPLAIN_SYSTEM},{"role":"user","content":prompt}], max_completion_tokens=150
+        messages=[{"role":"system","content":EXPLAIN_SYSTEM},{"role":"user","content":prompt}], max_completion_tokens=800
     )
     return resp.choices[0].message.content.strip()
 
