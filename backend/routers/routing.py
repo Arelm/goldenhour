@@ -63,7 +63,7 @@ def codex_score_fn(triage):
     prompt = (f"Emergency: {triage['emergency_type']} | Urgency: {triage['urgency_level']} | "
               f"Specialist: {triage['specialist_needed']} | Requirements: {triage['key_requirements']}")
     resp = client.chat.completions.create(
-        model="codex-mini-latest",
+        model="gpt-5.6",
         messages=[{"role":"system","content":CODEX_SYSTEM},{"role":"user","content":prompt}]
     )
     code = resp.choices[0].message.content.strip()
