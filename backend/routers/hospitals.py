@@ -1,0 +1,37 @@
+from fastapi import APIRouter, HTTPException
+from database import get_all_hospitals, get_hospital_by_id, update_hospital_capacity, log_override
+from models import CapacityUpdate, OverrideRequest
+
+router = APIRouter()
+
+
+@router.get("/")
+async def list_hospitals():
+    return get_all_hospitals()
+
+
+@router.get("/{hospital_id}")
+async def get_hospital(hospital_id: int):
+    h = get_hospital_by_id(hospital_id)
+    if not h:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    return h
+
+
+@router.patch("/{hospital_id}/capacity")
+async def update_capacity(hospital_id: int, update: CapacityUpdate):
+    h = get_hospital_by_id(hospital_id)
+    if not h:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    updates = {k: v for k, v in update.dict().items() if v is not None}
+    update_hospital_capacity(hospital_id, updates)
+    return {"message": f"Updated {h['name']}", "updates": updates}
+
+
+@router.post("/override")
+async def dispatcher_override(override: OverrideRequest):
+    h = get_hospital_by_id(override.override_hospital_id)
+    if not h:
+        raise HTTPException(status_code=404, detail="Override hospital not found")
+    log_override(override.dispatch_id, override.override_hospital_id, override.reason)
+    return {"message": "Override logged", "overridden_to": h["name"]}
