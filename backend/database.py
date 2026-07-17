@@ -63,7 +63,13 @@ CREATE TABLE IF NOT EXISTS dispatch_log (
 """
 
 INSERT_HOSPITAL = """
-INSERT OR IGNORE INTO hospitals VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+INSERT OR IGNORE INTO hospitals (
+    id, name, short_name, area, lat, lng,
+    total_beds, available_beds, icu_beds, available_icu,
+    has_cardiologist, has_neurologist, has_trauma_surgeon,
+    has_general_surgeon, has_pediatrician, generator_status,
+    blood_bank, cath_lab, ct_scanner, phone, capacity_note
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 """
 
 
