@@ -46,9 +46,7 @@ const MOCK_HISTORY = [
   { shift: "Afternoon (2PM–10PM)", admin: "C. Nwosu", time: "02:11 PM, 16 Jul", available_beds: 44, available_icu: 3, generator: false },
 ];
 
-git add frontend/src/pages/Admin.jsx
-git commit -m "Point Admin page API to Railway production URL"
-git push origin main
+const API_BASE = import.meta?.env?.VITE_API_URL || "https://goldenhour-production-e154.up.railway.app";
 
 export default function AdminDashboard() {
   const [screen, setScreen] = useState("login"); // login | dashboard | success
