@@ -42,7 +42,7 @@ const URGENCY_COLORS = {
   LOW: "#22c55e",
 };
 
-const API_BASE = import.meta?.env?.VITE_API_URL || "http://localhost:8000";
+const API_BASE = import.meta?.env?.VITE_API_URL || "https://goldenhour-production-e154.up.railway.app";
 
 // Mock response for demo when API is not available
 const MOCK_RESPONSE = {
