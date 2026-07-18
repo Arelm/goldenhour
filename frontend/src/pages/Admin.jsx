@@ -46,7 +46,9 @@ const MOCK_HISTORY = [
   { shift: "Afternoon (2PM–10PM)", admin: "C. Nwosu", time: "02:11 PM, 16 Jul", available_beds: 44, available_icu: 3, generator: false },
 ];
 
-const API_BASE = "http://localhost:8000";
+git add frontend/src/pages/Admin.jsx
+git commit -m "Point Admin page API to Railway production URL"
+git push origin main
 
 export default function AdminDashboard() {
   const [screen, setScreen] = useState("login"); // login | dashboard | success
