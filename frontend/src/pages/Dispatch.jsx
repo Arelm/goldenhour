@@ -622,7 +622,7 @@ export default function GoldenHour() {
                         justifyContent: "space-between",
                       }}
                     >
-                      <span>⚡ CODEX-GENERATED SCORING FUNCTION</span>
+                      <span>⚡ SCORING BREAKDOWN</span>
                       <span>{showCodex ? "▲" : "▼"}</span>
                     </button>
                     {showCodex && (
