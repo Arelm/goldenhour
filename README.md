@@ -22,7 +22,7 @@ GoldenHour tells you WHICH hospital to go to.**
 ## How It Works
 
 1. **GPT-5.6 Triage Agent** — parses symptoms → emergency type, urgency, specialist needed
-2. **Codex Routing Agent** — generates a custom Python scoring function per emergency type
+2. **Deterministic Routing Policy** — hard eligibility gates (ICU, specialist, equipment), normalized weighted scoring, explicit reason codes, and stable tie-breakers
 3. **Google Maps Distance Matrix** — real-time Lagos traffic ETAs to all 12 hospitals
 4. **GPT-5.6 Explanation Agent** — plain English dispatch recommendation
 
@@ -30,13 +30,27 @@ GoldenHour tells you WHICH hospital to go to.**
 
 ## Stack
 
-- **AI:** GPT-5.6 (triage + explanation), Codex (dynamic scoring)
+- **AI:** GPT-5.6 (triage + dispatch explanation); deterministic RoutingPolicy for scoring (rebuilt with Codex)
 - **Backend:** FastAPI → Railway
 - **Frontend:** React + Vite → Vercel
 - **Database:** SQLite (hospital capacity + dispatch log)
 - **Maps:** Google Maps Distance Matrix API
 
 ---
+## Built with Codex and GPT-5.6
+
+**Prior to Build Week submission work:** the core app existed — FastAPI backend, React frontend, GPT-5.6 triage integration, hospital database, and dispatch UI. An earlier version generated per-emergency scoring functions at runtime and executed them.
+
+**During the Submission Period (built with Codex):**
+- Codex reviewed the codebase and flagged the runtime execution of model-generated scoring code as unsafe (arbitrary code execution, fail-open scoring, no hard eligibility gates)
+- Rebuilt the routing engine as a deterministic `RoutingPolicy` (`backend/routing_policy.py`): eligibility gates, normalized weighted factors, explicit reason codes, stable tie-breakers — commit `c5165c0`
+- Added strict pydantic validation of GPT-5.6 triage output (`TriageOutput`)
+- Secured the hospital capacity endpoint with `X-API-Key` authentication and wired the Admin UI to it — commit `ccc34ae`
+- Added the backend test suite (routing gates, validation, tie-breaking, capacity auth) — 9 tests passing
+
+GPT-5.6 remains responsible for what AI does best here: symptom triage and the plain-English dispatch explanation. Ranking decisions are deterministic and auditable — in emergency medicine, that's a feature.
+
+Codex /feedback session: `019f78d5-3c74-7112-887d-a98df3ae8ab7`
 
 ## Setup
 
