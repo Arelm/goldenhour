@@ -115,7 +115,8 @@ def get_hospital_by_id(hid):
 def update_hospital_capacity(hid, updates):
     allowed = [
         "available_beds", "available_icu", "has_cardiologist",
-        "has_neurologist", "has_trauma_surgeon", "generator_status", "capacity_note"
+        "has_neurologist", "has_trauma_surgeon", "has_general_surgeon",
+        "has_pediatrician", "generator_status", "capacity_note"
     ]
     conn = get_connection()
     sets, vals = [], []

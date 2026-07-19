@@ -76,13 +76,47 @@ class RoutingResponse(BaseModel):
 
 
 class CapacityUpdate(BaseModel):
-    available_beds: Optional[int] = None
-    available_icu: Optional[int] = None
+    """Capacity input supporting both legacy Admin UI and current API field names."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # New API names: available general and ICU beds, respectively.
+    general_beds: Optional[int] = Field(default=None, ge=0)
+    icu_beds: Optional[int] = Field(default=None, ge=0)
+    generator_online: Optional[bool] = None
+    # Legacy names remain accepted so the current Hospitals page keeps working.
+    available_beds: Optional[int] = Field(default=None, ge=0)
+    available_icu: Optional[int] = Field(default=None, ge=0)
     has_cardiologist: Optional[bool] = None
     has_neurologist: Optional[bool] = None
     has_trauma_surgeon: Optional[bool] = None
+    has_general_surgeon: Optional[bool] = None
+    has_pediatrician: Optional[bool] = None
     generator_status: Optional[bool] = None
     capacity_note: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_aliases_and_content(self):
+        if self.general_beds is not None and self.available_beds is not None and self.general_beds != self.available_beds:
+            raise ValueError("general_beds and available_beds must match when both are supplied")
+        if self.icu_beds is not None and self.available_icu is not None and self.icu_beds != self.available_icu:
+            raise ValueError("icu_beds and available_icu must match when both are supplied")
+        if self.generator_online is not None and self.generator_status is not None and self.generator_online != self.generator_status:
+            raise ValueError("generator_online and generator_status must match when both are supplied")
+        if not self.model_dump(exclude_none=True):
+            raise ValueError("At least one capacity field is required")
+        return self
+
+    def routing_updates(self) -> dict:
+        """Translate accepted input aliases to the columns used by routing."""
+        updates = self.model_dump(exclude_none=True)
+        if "general_beds" in updates:
+            updates["available_beds"] = updates.pop("general_beds")
+        if "icu_beds" in updates:
+            updates["available_icu"] = updates.pop("icu_beds")
+        if "generator_online" in updates:
+            updates["generator_status"] = updates.pop("generator_online")
+        return updates
 
 
 class OverrideRequest(BaseModel):

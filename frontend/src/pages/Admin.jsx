@@ -47,6 +47,7 @@ const MOCK_HISTORY = [
 ];
 
 const API_BASE = import.meta?.env?.VITE_API_URL || "https://goldenhour-production-e154.up.railway.app";
+const CAPACITY_API_KEY = import.meta?.env?.VITE_HOSPITAL_CAPACITY_API_KEY;
 
 export default function AdminDashboard() {
   const [screen, setScreen] = useState("login"); // login | dashboard | success
@@ -114,7 +115,10 @@ export default function AdminDashboard() {
     try {
       await fetch(`${API_BASE}/hospitals/${selectedHospital}/capacity`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(CAPACITY_API_KEY ? { "X-API-Key": CAPACITY_API_KEY } : {}),
+        },
         body: JSON.stringify(payload),
       });
     } catch (e) {

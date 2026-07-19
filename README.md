@@ -54,6 +54,9 @@ cp .env.example .env.local   # add Railway URL
 npm run dev
 ```
 
+Set `HOSPITAL_CAPACITY_API_KEY` on the backend to protect `PATCH /hospitals/{id}/capacity`.
+The Admin UI sends `VITE_HOSPITAL_CAPACITY_API_KEY` as the `X-API-Key` header; use the same value when deploying it.
+
 ---
 
 ## Built By
