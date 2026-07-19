@@ -1,5 +1,6 @@
 from openai import OpenAI
 import json, os
+from models import TriageOutput
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -30,4 +31,4 @@ async def run_triage(symptoms, patient_age=None, additional_info=None):
         ],
         response_format={"type": "json_object"}
     )
-    return json.loads(response.choices[0].message.content)
+    return TriageOutput.model_validate(json.loads(response.choices[0].message.content))

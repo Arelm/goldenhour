@@ -1,33 +1,18 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 from openai import OpenAI
-import json, os, math, requests
+from pydantic import ValidationError
+import os, math, requests
 from database import get_all_hospitals, log_dispatch
 from models import EmergencyRequest, RoutingResponse, HospitalWithETA, TriageOutput
 from routers.triage import run_triage
+from routing_policy import NoEligibleHospitalError, POLICY_DESCRIPTION, RoutingPolicy, RoutingPolicyError
 
 router = APIRouter()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 GMAPS_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
-
-CODEX_SYSTEM = """You are Codex. Generate a Python function to score Lagos hospitals for emergency routing.
-Return ONLY a valid Python function named score_hospital.
-Signature: def score_hospital(hospital: dict, triage: dict, eta_minutes: int) -> float
-Score range: 0-100. Higher = better match.
-
-USE THESE EXACT DICT KEYS — do not invent aliases or alternative key names.
-hospital keys (ints, 1=yes/0=no unless noted): available_beds, icu_beds, available_icu,
-has_cardiologist, has_neurologist, has_trauma_surgeon, has_general_surgeon, has_pediatrician,
-generator_status, blood_bank, cath_lab, ct_scanner.
-triage keys: emergency_type (e.g. "TRAUMA", "CARDIAC_ARREST", "STROKE"), urgency_level
-(e.g. "CRITICAL"), specialist_needed (e.g. "trauma_surgeon" — map to the matching has_* key),
-key_requirements (list, e.g. ["icu","blood_bank","ct_scanner","generator"]).
-
-Weight based on emergency_type and urgency_level in triage.
-CRITICAL urgency: available_icu > 0 + required specialist present = 60%+ of score.
-Cardiac: prioritise cath_lab, has_cardiologist, available_icu.
-Stroke: prioritise ct_scanner, has_neurologist. Penalise ETA heavily — every 5min = -8pts.
-Trauma: prioritise has_trauma_surgeon, blood_bank.
-Always penalise generator_status=0 for CRITICAL cases (-15pts)."""
+logger = logging.getLogger(__name__)
 
 EXPLAIN_SYSTEM = """You are a Lagos emergency dispatch AI.
 Explain in 2-3 plain sentences WHY this hospital was chosen.
@@ -68,24 +53,9 @@ def get_etas(origin_lat, origin_lng, hospitals):
                            "distance_km": round(haversine(origin_lat,origin_lng,h["lat"],h["lng"]),1)} for h in hospitals}
 
 
-def codex_score_fn(triage):
-    prompt = (f"Emergency: {triage['emergency_type']} | Urgency: {triage['urgency_level']} | "
-              f"Specialist: {triage['specialist_needed']} | Requirements: {triage['key_requirements']}")
-    resp = client.chat.completions.create(
-        model="gpt-5.6",
-        messages=[{"role":"system","content":CODEX_SYSTEM},{"role":"user","content":prompt}]
-    )
-    code = resp.choices[0].message.content.strip()
-    if "```python" in code: code = code.split("```python")[1].split("```")[0].strip()
-    elif "```" in code: code = code.split("```")[1].split("```")[0].strip()
-    ns = {}
-    exec(code, ns)
-    return code, ns["score_hospital"]
-
-
 def explain(triage, top, alts):
     alt_str = ", ".join([f"{a['short_name']} ({a['eta_minutes']}min)" for a in alts[:2]])
-    prompt = (f"Emergency: {triage['emergency_type']} — {triage['summary']}\n"
+    prompt = (f"Emergency: {triage.emergency_type} — {triage.summary}\n"
               f"Recommended: {top['name']} in {top['area']}\n"
               f"ETA: {top['eta_minutes']} min | ICU: {top['available_icu']} | "
               f"Specialist available: {top.get('has_required_specialist')} | "
@@ -98,41 +68,21 @@ def explain(triage, top, alts):
     return resp.choices[0].message.content.strip()
 
 
-def specialist_match(h, specialist):
-    mapping = {"cardiologist":"has_cardiologist","neurologist":"has_neurologist",
-               "trauma_surgeon":"has_trauma_surgeon","general_surgeon":"has_general_surgeon",
-               "pediatrician":"has_pediatrician","none":None}
-    field = mapping.get(specialist.lower())
-    return True if not field else bool(h.get(field, False))
-
-
 @router.post("/route", response_model=RoutingResponse)
 async def route_emergency(request: EmergencyRequest):
     try:
         triage = await run_triage(request.symptoms, request.patient_age, request.additional_info)
         hospitals = get_all_hospitals()
         etas = get_etas(request.incident_lat, request.incident_lng, hospitals)
-        code, score_fn = codex_score_fn(triage)
-        scored = []
-        for h in hospitals:
-            eta_data = etas.get(h["id"], {"eta_minutes":30,"distance_km":10})
-            try:
-                score = max(0, min(100, float(score_fn(h, triage, eta_data["eta_minutes"]))))
-            except:
-                score = 0
-            scored.append({**h, **eta_data, "score": score,
-                           "has_required_specialist": specialist_match(h, triage.get("specialist_needed","none")),
-                           "score_breakdown":{"score":score,"eta":eta_data["eta_minutes"],
-                                              "icu":h["available_icu"],"generator":h["generator_status"]}})
-        scored.sort(key=lambda x: x["score"], reverse=True)
+        scored = RoutingPolicy().rank(hospitals, triage, etas)
         top, alts = scored[0], scored[1:3]
         explanation = explain(triage, top, alts)
-        did = log_dispatch({"emergency_type":triage["emergency_type"],
+        did = log_dispatch({"emergency_type":triage.emergency_type,
                             "incident_location":request.incident_location,
                             "symptoms":request.symptoms,
                             "recommended_hospital_id":top["id"],
                             "recommended_hospital_name":top["name"],
-                            "triage_output":json.dumps(triage),
+                            "triage_output":triage.model_dump_json(),
                             "routing_explanation":explanation})
         def to_eta(h):
             return HospitalWithETA(id=h["id"],name=h["name"],short_name=h["short_name"],
@@ -141,9 +91,19 @@ async def route_emergency(request: EmergencyRequest):
                 generator_status=h["generator_status"],eta_minutes=h["eta_minutes"],
                 distance_km=h["distance_km"],score=h["score"],
                 score_breakdown=h["score_breakdown"],capacity_note=h.get("capacity_note",""))
-        return RoutingResponse(dispatch_id=did, triage=TriageOutput(**triage),
+        return RoutingResponse(dispatch_id=did, triage=triage,
             recommended_hospital=to_eta(top), alternatives=[to_eta(a) for a in alts],
-            routing_explanation=explanation, codex_scoring_function=code,
+            routing_explanation=explanation, codex_scoring_function=POLICY_DESCRIPTION,
             all_hospitals_ranked=[to_eta(h) for h in scored])
+    except NoEligibleHospitalError as exc:
+        logger.warning("Routing policy excluded every hospital: %s", exc.exclusions)
+        raise HTTPException(status_code=422, detail={"message": str(exc), "exclusions": exc.exclusions})
+    except ValidationError as exc:
+        logger.warning("Invalid triage output rejected: %s", exc.errors())
+        raise HTTPException(status_code=422, detail="Triage output failed validation. No recommendation was made.") from exc
+    except RoutingPolicyError as exc:
+        logger.exception("Routing policy failed")
+        raise HTTPException(status_code=500, detail="Routing policy evaluation failed. No recommendation was made.") from exc
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Emergency routing failed")
+        raise HTTPException(status_code=500, detail="Emergency routing failed. No recommendation was made.") from e

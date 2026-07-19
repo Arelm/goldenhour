@@ -1,5 +1,6 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from typing import List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class EmergencyRequest(BaseModel):
@@ -12,12 +13,38 @@ class EmergencyRequest(BaseModel):
 
 
 class TriageOutput(BaseModel):
-    emergency_type: str
-    urgency_level: str
-    specialist_needed: str
-    key_requirements: List[str]
-    red_flags: List[str]
-    summary: str
+    """Validated contract between the LLM triage step and routing policy."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    emergency_type: Literal[
+        "CARDIAC_ARREST", "STROKE", "TRAUMA", "SEPSIS", "RESPIRATORY",
+        "PEDIATRIC", "OBSTETRIC", "GENERAL",
+    ]
+    urgency_level: Literal["CRITICAL", "HIGH", "MODERATE", "LOW"]
+    specialist_needed: Literal[
+        "cardiologist", "neurologist", "trauma_surgeon", "general_surgeon",
+        "pediatrician", "none",
+    ]
+    key_requirements: List[Literal["icu", "cath_lab", "ct_scanner", "blood_bank", "generator"]] = Field(default_factory=list)
+    red_flags: List[str] = Field(default_factory=list)
+    summary: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def require_clinically_required_capabilities(self):
+        required_by_type = {
+            "CARDIAC_ARREST": ("cardiologist", "cath_lab"),
+            "STROKE": ("neurologist", "ct_scanner"),
+            "TRAUMA": ("trauma_surgeon", "blood_bank"),
+        }
+        specialist, requirement = required_by_type.get(self.emergency_type, (None, None))
+        if specialist and self.specialist_needed != specialist:
+            raise ValueError(f"{self.emergency_type} must require a {specialist}")
+        if requirement and requirement not in self.key_requirements:
+            raise ValueError(f"{self.emergency_type} must include {requirement} in key_requirements")
+        if self.urgency_level in {"CRITICAL", "HIGH"} and "icu" not in self.key_requirements:
+            raise ValueError("CRITICAL and HIGH emergencies must include icu in key_requirements")
+        return self
 
 
 class HospitalWithETA(BaseModel):
